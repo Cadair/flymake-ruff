@@ -33,11 +33,48 @@
   :group 'flymake-ruff
   :type '(list string))
 
+(defcustom flymake-ruff-error-regex ".*"
+  "Regex to match ruff codes to raise as flymake errors"
+  :group 'flymake-ruff
+  :type 'string)
+
+(defcustom flymake-ruff-warning-regex nil
+  "Regex to match ruff codes to raise as flymake warnings"
+  :group 'flymake-ruff
+  :type 'string)
+
+(defcustom flymake-ruff-note-regex nil
+  "Regex to match ruff codes to raise as flymake notes"
+  :group 'flymake-ruff
+  :type 'string)
+
 (defvar flymake-ruff--output-regex "\\(.*\\):\\([0-9]+\\):\\([0-9]+\\): \\([A-Za-z0-9]+\\):? \\(.*\\)")
 
 (defconst flymake-ruff--default-configs
   '(".ruff.toml" "ruff.toml" "pyproject.toml")
   "Default configuration files supported by Ruff.")
+
+(defun flymake-ruff--check-regex (regex)
+  "Return true if the regex is not nil or ''."
+  (and regex (not (string= "" regex)))
+  )
+
+(defun flymake-ruff--get-type-from-code (code)
+  "Return the flymake error type from the ruff code."
+  (let* ((errors-regex (symbol-value 'flymake-ruff-error-regex))
+         (warnings-regex (symbol-value 'flymake-ruff-warning-regex))
+         (notes-regex (symbol-value 'flymake-ruff-note-regex)))
+
+	(message "Got ruff code %s %s %s" code errors-regex (string-match errors-regex code))
+	(cond
+	 ((and (flymake-ruff--check-regex errors-regex) (string-match errors-regex code)) :error)
+	 ((and (flymake-ruff--check-regex warnings-regex) (string-match warnings-regex code)) :warning)
+	 ((and (flymake-ruff--check-regex notes-regex) (string-match notes-regex code)) :note)
+	 ;; Return error by default (the old behaviour)
+	 (:error)
+	 )
+	)
+  )
 
 (defun flymake-ruff--check-buffer ()
   "Generate a list of diagnostics for the current buffer."
@@ -88,7 +125,7 @@
                  (description (format "Ruff: %s %s" code msg))
                  (region (flymake-diag-region code-buffer (1+ (- line start-line)) col))
                  (dx (flymake-make-diagnostic code-buffer (car region) (cdr region)
-                                              :error description)))
+                                              (flymake-ruff--get-type-from-code code) description)))
             (add-to-list 'dxs dx)))))
     dxs))
 
